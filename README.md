@@ -25,6 +25,12 @@ If a URL can't be fetched, or a file has no extractable text, the app reports it
 - Sidebar controls for chunk size, chunk overlap, and number of chunks retrieved (top-k)
 - Graceful error handling for missing API keys, failed URL fetches, and Groq API errors — no crashes, no fabricated output
 - A custom "Slate & Sage" visual theme (calm cool-neutral background, muted teal accent, Space Grotesk / IBM Plex type) with retrieval relevance shown as a small filled bar next to each source, instead of a bare decimal score
+- **Optional tone nudge** — a free-text field ("more playful", "more formal", etc.) layered on top of each platform's built-in profile, for both the initial generation and any regeneration
+- **Per-platform regenerate** — a 🔁 button on each tab reruns just that one platform with a fresh Groq call, leaving the other generated posts untouched
+- **Real copy-to-clipboard** — a proper button (not "select all") that copies the current, possibly-edited post text
+- **Export all posts** — download everything as a single `.txt` or a `.csv` (platform, post, hashtags, char count, limit status), reflecting your edits, not just the original generation
+- **Platform mockup preview** — each post renders inside an approximate LinkedIn/X/Instagram/Facebook/Threads-style card (generic placeholder identity, no real logos/brand marks reproduced) so you can see roughly how it'll read in situ
+- **Grounding view** — an expander that highlights phrases in the generated post that trace back near-verbatim to a specific retrieved chunk, color-coded per source with a legend. This is a best-effort visual aid (built with `difflib`, no extra dependencies) — paraphrased content won't highlight, only close textual reuse will
 
 ## Folder structure
 
