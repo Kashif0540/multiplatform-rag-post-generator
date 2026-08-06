@@ -24,6 +24,7 @@ If a URL can't be fetched, or a file has no extractable text, the app reports it
 - Expandable "Sources used" section per post, showing exactly which retrieved chunks (and their source) informed that post
 - Sidebar controls for chunk size, chunk overlap, and number of chunks retrieved (top-k)
 - Graceful error handling for missing API keys, failed URL fetches, and Groq API errors — no crashes, no fabricated output
+- A custom "Slate & Sage" visual theme (calm cool-neutral background, muted teal accent, Space Grotesk / IBM Plex type) with retrieval relevance shown as a small filled bar next to each source, instead of a bare decimal score
 
 ## Folder structure
 
@@ -33,7 +34,8 @@ If a URL can't be fetched, or a file has no extractable text, the app reports it
 ├── requirements.txt      # Pinned dependencies
 ├── README.md             # This file
 └── .streamlit/
-    └── secrets.toml       # Local-only, holds GROQ_API_KEY — never commit this
+    ├── config.toml         # Theme (colors) — safe to commit, no secrets in it
+    └── secrets.toml        # Local-only, holds GROQ_API_KEY — never commit this
 ```
 
 ## Local setup
@@ -63,7 +65,7 @@ The app will open in your browser at `http://localhost:8501`.
 
 ## Deployment — GitHub + Streamlit Community Cloud
 
-1. Create a new GitHub repository and push `app.py`, `requirements.txt`, `README.md`, and `.streamlit/config.toml` (if you're using one) to it.
+1. Create a new GitHub repository and push `app.py`, `requirements.txt`, `README.md`, and `.streamlit/config.toml` to it. `config.toml` only holds the color theme — no secrets — so it's safe to commit.
 2. **Do not commit a `secrets.toml` file with a real API key in it.** Add `.streamlit/secrets.toml` to your `.gitignore` if you created one locally for testing.
 3. Go to [https://share.streamlit.io](https://share.streamlit.io), sign in with GitHub, click **"New app,"** and select your repository, branch, and `app.py` as the entry point.
 4. Before or right after deploying, open the app's **Settings → Secrets** in Streamlit Community Cloud and add:
