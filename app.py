@@ -416,16 +416,236 @@ def generate_posts(vector_store: VectorStore, topic: str, platforms: List[str], 
 
 
 # =============================================================================
+# Theme
+#
+# Token system — "Slate & Sage": a cool, quiet palette built for reading and
+# editing text calmly, with one deliberate signature: retrieved chunks show
+# their similarity as a small filled bar instead of a bare decimal, so the
+# grounding behind each post stays visible rather than reading as trivia.
+#
+#   bg / surface   #F4F6F5 / #FFFFFF   quiet, cool neutrals — not warm cream
+#   ink / muted    #1E2B29 / #5B6B67   softened near-black, not pure black
+#   accent (harbor)#2F6F62             deep muted teal — calm, not alarming
+#   status colors  success/warn/error, all muted rather than saturated
+#
+# Type: Space Grotesk for headings (technical warmth), IBM Plex Sans for body
+# (documentation-grade legibility), IBM Plex Mono for data — char counts,
+# hashtags, similarity scores — so retrieved/measured things read as data.
+# =============================================================================
+
+CUSTOM_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+    --bg: #F4F6F5;
+    --surface: #FFFFFF;
+    --surface-alt: #EBEFED;
+    --ink: #1E2B29;
+    --ink-muted: #5B6B67;
+    --border: #D9E1DE;
+    --accent: #2F6F62;
+    --accent-hover: #24564B;
+    --accent-soft: #DCEAE5;
+    --success: #3F7D5C;
+    --success-soft: #DCEEE3;
+    --warning: #A97417;
+    --warning-soft: #F3E7D0;
+    --error: #B14B3F;
+    --error-soft: #F5DEDA;
+}
+
+html, body, [data-testid="stAppViewContainer"], [data-testid="stApp"] {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+}
+
+[data-testid="stHeader"] { background-color: transparent; }
+
+[data-testid="stSidebar"] {
+    background-color: var(--surface-alt);
+    border-right: 1px solid var(--border);
+}
+[data-testid="stSidebar"] * { color: var(--ink); }
+
+h1, h2, h3 {
+    font-family: 'Space Grotesk', sans-serif !important;
+    color: var(--ink) !important;
+    letter-spacing: -0.01em;
+}
+h1 { font-weight: 700 !important; }
+h2, h3 { font-weight: 600 !important; }
+
+p, span, label, div, li { font-family: 'IBM Plex Sans', sans-serif; }
+
+.app-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.15rem;
+}
+.app-subtitle { color: var(--ink-muted); font-size: 1rem; }
+
+hr { border-color: var(--border) !important; }
+
+/* Card-style bordered containers (st.container(border=True)) */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: var(--surface);
+    border: 1px solid var(--border) !important;
+    border-radius: 14px !important;
+    padding: 0.25rem 0.25rem;
+    box-shadow: 0 1px 2px rgba(30, 43, 41, 0.04);
+}
+
+/* Buttons */
+[data-testid="stButton"] button {
+    border-radius: 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 500;
+    transition: transform 0.05s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+[data-testid="stButton"] button:hover { transform: translateY(-1px); }
+[data-testid="stButton"] button[kind="primary"] {
+    background-color: var(--accent);
+    border-color: var(--accent);
+}
+[data-testid="stButton"] button[kind="primary"]:hover {
+    background-color: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+[data-testid="stButton"] button[kind="secondary"] {
+    background-color: var(--surface);
+    border-color: var(--border);
+    color: var(--ink);
+}
+
+/* Inputs */
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stFileUploaderDropzone"] {
+    border-radius: 10px !important;
+    border-color: var(--border) !important;
+}
+[data-testid="stTextInput"] input:focus,
+[data-testid="stTextArea"] textarea:focus {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 1px var(--accent) !important;
+}
+
+/* Multiselect chips */
+[data-baseweb="tag"] {
+    background-color: var(--accent) !important;
+    border-radius: 6px !important;
+}
+
+/* Tabs */
+[data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid var(--border); }
+[data-baseweb="tab"] {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 500;
+    color: var(--ink-muted);
+}
+[data-baseweb="tab"][aria-selected="true"] {
+    color: var(--accent);
+    border-bottom-color: var(--accent) !important;
+}
+[data-baseweb="tab-highlight"] { background-color: var(--accent) !important; }
+
+/* Expander */
+[data-testid="stExpander"] {
+    border: 1px solid var(--border) !important;
+    border-radius: 10px !important;
+    background-color: var(--surface);
+}
+
+/* Native alerts, re-toned to match the palette instead of stock red/orange/blue */
+[data-testid="stAlertContentError"] { color: var(--error) !important; }
+[data-testid="stAlertContentWarning"] { color: var(--warning) !important; }
+[data-testid="stAlertContentSuccess"] { color: var(--success) !important; }
+[data-testid="stAlertContentInfo"] { color: var(--accent) !important; }
+
+/* Custom status badges (used instead of loud alert boxes for benign status) */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    margin: 0.25rem 0 0.6rem;
+}
+.status-badge.neutral { background-color: var(--surface-alt); color: var(--ink-muted); border: 1px solid var(--border); }
+.status-badge.ok { background-color: var(--success-soft); color: var(--success); }
+.status-badge.over { background-color: var(--error-soft); color: var(--error); }
+
+/* Relevance bars — the signature element: makes retrieval scores visible at a glance */
+.source-block { margin-bottom: 0.85rem; }
+.source-name {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--ink);
+}
+.relevance-row { display: flex; align-items: center; gap: 8px; margin: 3px 0 5px; }
+.relevance-track {
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background-color: var(--accent-soft);
+    overflow: hidden;
+}
+.relevance-fill { height: 100%; border-radius: 999px; background-color: var(--accent); }
+.relevance-score {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--ink-muted);
+    min-width: 38px;
+    text-align: right;
+}
+.source-preview { color: var(--ink-muted); font-size: 0.85rem; line-height: 1.4; }
+</style>
+"""
+
+
+def relevance_bar_html(score: float) -> str:
+    """Render a chunk's similarity score as a small filled bar + mono value."""
+    pct = max(0, min(100, round(score * 100)))
+    return (
+        f'<div class="relevance-row">'
+        f'<div class="relevance-track"><div class="relevance-fill" style="width:{pct}%;"></div></div>'
+        f'<span class="relevance-score">{score:.2f}</span>'
+        f'</div>'
+    )
+
+
+def char_status_badge_html(char_count: int, limit: Optional[int]) -> str:
+    """Render the character-count status as a quiet inline badge rather than a loud alert box."""
+    if limit is None:
+        return f'<span class="status-badge neutral">{char_count} chars · no hard cap for this platform</span>'
+    if char_count > limit:
+        return f'<span class="status-badge over">⚠ {char_count} / {limit} · over the limit</span>'
+    return f'<span class="status-badge ok">✓ {char_count} / {limit} · within limit</span>'
+
+
+# =============================================================================
 # Streamlit UI
 # =============================================================================
 
-st.set_page_config(page_title="MultiPlatform RAG Post Generator", page_icon="📝", layout="wide")
+st.set_page_config(page_title="MultiPlatform RAG Post Generator", page_icon="🧭", layout="wide")
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-st.title("📝 MultiPlatform RAG Post Generator")
-st.caption(
-    "Ground your social posts in your own files or URLs. Retrieval finds the relevant chunks; "
-    "Groq only ever sees those chunks, your topic, and the selected platform's profile."
+st.markdown('<div class="app-eyebrow">Retrieval-grounded content studio</div>', unsafe_allow_html=True)
+st.title("🧭 MultiPlatform RAG Post Generator")
+st.markdown(
+    '<div class="app-subtitle">Ground your social posts in your own files or URLs. Retrieval finds the '
+    "relevant chunks; Groq only ever sees those chunks, your topic, and the selected platform's profile.</div>",
+    unsafe_allow_html=True,
 )
+st.write("")
 
 # --- Resolve the Groq API key (st.secrets, never hardcoded) ---
 try:
@@ -461,7 +681,10 @@ for _key, _val in _defaults.items():
 
 # --- Sidebar controls ---
 with st.sidebar:
-    st.header("⚙️ Knowledge base settings")
+    st.markdown('<div class="app-eyebrow">Controls</div>', unsafe_allow_html=True)
+    st.header("Knowledge base settings")
+
+    st.caption("Retrieval tuning")
     chunk_size = st.slider("Chunk size (characters)", min_value=200, max_value=2000, value=800, step=50)
     chunk_overlap = st.slider("Chunk overlap (characters)", min_value=0, max_value=500, value=150, step=10)
     if chunk_overlap >= chunk_size:
@@ -486,133 +709,136 @@ with st.sidebar:
         "is rebuilt fresh each session and is not saved between visits."
     )
 
+st.write("")
+
 # --- Step 1: source input ---
 st.subheader("1. Add your source content")
-col1, col2 = st.columns(2)
-with col1:
-    uploaded_files = st.file_uploader(
-        "Upload files (.txt / .pdf)", type=["txt", "pdf"], accept_multiple_files=True
-    )
-with col2:
-    url_block = st.text_area(
-        "Or paste URLs (one per line)",
-        height=150,
-        placeholder="https://example.com/article-one\nhttps://example.com/article-two",
-    )
+with st.container(border=True):
+    col1, col2 = st.columns(2)
+    with col1:
+        uploaded_files = st.file_uploader(
+            "Upload files (.txt / .pdf)", type=["txt", "pdf"], accept_multiple_files=True
+        )
+    with col2:
+        url_block = st.text_area(
+            "Or paste URLs (one per line)",
+            height=150,
+            placeholder="https://example.com/article-one\nhttps://example.com/article-two",
+        )
 
-has_input = bool(uploaded_files) or bool(url_block and url_block.strip())
-build_clicked = st.button("📚 Build knowledge base", type="primary", disabled=not has_input)
-if not has_input:
-    st.caption("Upload at least one file or paste at least one URL to enable this button.")
+    has_input = bool(uploaded_files) or bool(url_block and url_block.strip())
+    build_clicked = st.button("📚 Build knowledge base", type="primary", disabled=not has_input)
+    if not has_input:
+        st.caption("Upload at least one file or paste at least one URL to enable this button.")
 
-if build_clicked:
-    with st.spinner("Ingesting content..."):
-        documents, ingest_errors = ingest_sources(uploaded_files, url_block)
+    if build_clicked:
+        with st.spinner("Ingesting content..."):
+            documents, ingest_errors = ingest_sources(uploaded_files, url_block)
 
-    for err in ingest_errors:
-        st.warning(err)
+        for err in ingest_errors:
+            st.warning(err)
 
-    if not documents:
-        st.error("No usable content was ingested. Fix the issues above and try again.")
-    else:
-        try:
-            with st.spinner("Loading embedding model, chunking, and indexing..."):
-                model = load_embedding_model()
-                chunks = chunk_documents(documents, chunk_size=chunk_size, overlap=chunk_overlap)
-                if not chunks:
-                    raise ValueError("Ingested content produced zero chunks — check your chunk size settings.")
-                vector_store = VectorStore(model)
-                vector_store.build(chunks)
+        if not documents:
+            st.error("No usable content was ingested. Fix the issues above and try again.")
+        else:
+            try:
+                with st.spinner("Loading embedding model, chunking, and indexing..."):
+                    model = load_embedding_model()
+                    chunks = chunk_documents(documents, chunk_size=chunk_size, overlap=chunk_overlap)
+                    if not chunks:
+                        raise ValueError("Ingested content produced zero chunks — check your chunk size settings.")
+                    vector_store = VectorStore(model)
+                    vector_store.build(chunks)
 
-            st.session_state.vector_store = vector_store
-            st.session_state.kb_built = True
-            st.session_state.kb_summary = {
-                "num_sources": len(documents),
-                "num_chunks": len(chunks),
-                "sources": list(documents.keys()),
-            }
-            st.session_state.generation_results = {}
-            st.success(f"✅ Knowledge base built: {len(chunks)} chunks from {len(documents)} source(s).")
-        except Exception as exc:
-            st.error(f"Failed to build the knowledge base: {exc}")
+                st.session_state.vector_store = vector_store
+                st.session_state.kb_built = True
+                st.session_state.kb_summary = {
+                    "num_sources": len(documents),
+                    "num_chunks": len(chunks),
+                    "sources": list(documents.keys()),
+                }
+                st.session_state.generation_results = {}
+                st.success(f"✅ Knowledge base built: {len(chunks)} chunks from {len(documents)} source(s).")
+            except Exception as exc:
+                st.error(f"Failed to build the knowledge base: {exc}")
 
-if st.session_state.kb_built and st.session_state.kb_summary:
-    summary = st.session_state.kb_summary
-    with st.expander(f"📖 Current knowledge base — {summary['num_chunks']} chunks from {summary['num_sources']} source(s)"):
-        for s in summary["sources"]:
-            st.write(f"- {s}")
+    if st.session_state.kb_built and st.session_state.kb_summary:
+        summary = st.session_state.kb_summary
+        with st.expander(f"📖 Current knowledge base — {summary['num_chunks']} chunks from {summary['num_sources']} source(s)"):
+            for s in summary["sources"]:
+                st.write(f"- {s}")
 
-st.divider()
+st.write("")
 
 # --- Step 2: topic + platforms ---
 st.subheader("2. Choose your topic and platforms")
+with st.container(border=True):
+    topic_input = st.text_input("What should the post focus on?", placeholder="the key takeaways")
+    topic = topic_input.strip() if topic_input and topic_input.strip() else "the key takeaways"
 
-topic_input = st.text_input("What should the post focus on?", placeholder="the key takeaways")
-topic = topic_input.strip() if topic_input and topic_input.strip() else "the key takeaways"
+    platforms_selected = st.multiselect("Platforms", options=list(PLATFORM_PROFILES.keys()))
 
-platforms_selected = st.multiselect("Platforms", options=list(PLATFORM_PROFILES.keys()))
+    generate_disabled = not (st.session_state.kb_built and platforms_selected and GROQ_API_KEY)
+    generate_clicked = st.button("✨ Generate Posts", type="primary", disabled=generate_disabled)
 
-generate_disabled = not (st.session_state.kb_built and platforms_selected and GROQ_API_KEY)
-generate_clicked = st.button("✨ Generate Posts", type="primary", disabled=generate_disabled)
+    if not st.session_state.kb_built:
+        st.caption("Build a knowledge base above before generating posts.")
+    elif not platforms_selected:
+        st.caption("Select at least one platform to generate posts for.")
+    elif not GROQ_API_KEY:
+        st.caption("Add GROQ_API_KEY in Streamlit secrets to enable generation.")
 
-if not st.session_state.kb_built:
-    st.caption("Build a knowledge base above before generating posts.")
-elif not platforms_selected:
-    st.caption("Select at least one platform to generate posts for.")
-elif not GROQ_API_KEY:
-    st.caption("Add GROQ_API_KEY in Streamlit secrets to enable generation.")
+    if generate_clicked:
+        if groq_client is None:
+            st.error("Groq client is not configured — GROQ_API_KEY is missing.")
+        else:
+            with st.spinner(f"Retrieving context and generating {len(platforms_selected)} post(s)..."):
+                try:
+                    results = generate_posts(st.session_state.vector_store, topic, platforms_selected, k=top_k)
+                    st.session_state.generation_results = results
+                    for key in list(st.session_state.keys()):
+                        if key.startswith("post_text_"):
+                            del st.session_state[key]
+                except Exception as exc:
+                    st.error(f"Generation failed: {exc}")
 
-if generate_clicked:
-    if groq_client is None:
-        st.error("Groq client is not configured — GROQ_API_KEY is missing.")
-    else:
-        with st.spinner(f"Retrieving context and generating {len(platforms_selected)} post(s)..."):
-            try:
-                results = generate_posts(st.session_state.vector_store, topic, platforms_selected, k=top_k)
-                st.session_state.generation_results = results
-                for key in list(st.session_state.keys()):
-                    if key.startswith("post_text_"):
-                        del st.session_state[key]
-            except Exception as exc:
-                st.error(f"Generation failed: {exc}")
-
-st.divider()
+st.write("")
 
 # --- Step 3: results ---
 st.subheader("3. Your posts")
+with st.container(border=True):
+    results = st.session_state.generation_results
+    if results:
+        tabs = st.tabs(list(results.keys()))
+        for tab, platform in zip(tabs, results.keys()):
+            data = results[platform]
+            with tab:
+                if "error" in data:
+                    st.error(f"{platform} failed: {data['error']}")
+                    continue
 
-results = st.session_state.generation_results
-if results:
-    tabs = st.tabs(list(results.keys()))
-    for tab, platform in zip(tabs, results.keys()):
-        data = results[platform]
-        with tab:
-            if "error" in data:
-                st.error(f"{platform} failed: {data['error']}")
-                continue
+                text_key = f"post_text_{platform}"
+                if text_key not in st.session_state:
+                    st.session_state[text_key] = data["post"]
 
-            text_key = f"post_text_{platform}"
-            if text_key not in st.session_state:
-                st.session_state[text_key] = data["post"]
+                st.text_area("Post text (editable — select all to copy)", key=text_key, height=220)
+                current_text = st.session_state[text_key]
+                char_count = len(current_text)
+                limit = data["char_limit"]
 
-            st.text_area("Post text (editable — select all to copy)", key=text_key, height=220)
-            current_text = st.session_state[text_key]
-            char_count = len(current_text)
-            limit = data["char_limit"]
+                st.markdown(char_status_badge_html(char_count, limit), unsafe_allow_html=True)
+                st.write("**Hashtags:**", ", ".join(data["hashtags"]) if data["hashtags"] else "_none suggested_")
 
-            if limit is None:
-                st.info(f"Character count: **{char_count}** — {platform} has no hard cap; follow the profile's length guidance.")
-            elif char_count > limit:
-                st.error(f"⚠️ Character count: **{char_count} / {limit}** — exceeds {platform}'s limit.")
-            else:
-                st.success(f"✅ Character count: **{char_count} / {limit}** — within {platform}'s limit.")
-
-            st.write("**Hashtags:**", ", ".join(data["hashtags"]) if data["hashtags"] else "_none suggested_")
-
-            with st.expander("Sources used"):
-                for src in data["sources_used"]:
-                    st.markdown(f"**{src['source']}** — similarity {src['score']:.3f}")
-                    preview = src["text"][:300] + ("..." if len(src["text"]) > 300 else "")
-                    st.caption(preview)
-else:
-    st.caption("Generated posts will appear here after you build a knowledge base and click Generate Posts.")
+                with st.expander("Sources used"):
+                    for src in data["sources_used"]:
+                        preview = src["text"][:300] + ("..." if len(src["text"]) > 300 else "")
+                        st.markdown(
+                            f'<div class="source-block">'
+                            f'<div class="source-name">{src["source"]}</div>'
+                            f'{relevance_bar_html(src["score"])}'
+                            f'<div class="source-preview">{preview}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+    else:
+        st.caption("Generated posts will appear here after you build a knowledge base and click Generate Posts.")
