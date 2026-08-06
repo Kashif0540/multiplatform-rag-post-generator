@@ -8,6 +8,9 @@ platform-picker interface. No pipeline logic is rewritten here — only the
 key-resolution and file-reading glue changes to fit Streamlit.
 """
 
+import csv
+import difflib
+import html as html_lib
 import io
 import json
 import re
@@ -18,6 +21,7 @@ import faiss
 import numpy as np
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 import trafilatura
 from groq import Groq
 from pypdf import PdfReader
@@ -283,16 +287,30 @@ class VectorStore:
 
 
 # =============================================================================
-# Platform-profiled prompt builder (identical to Phase 1)
+# Platform-profiled prompt builder (identical core logic to Phase 1; extended
+# with an optional tone_nudge — extra free-text style guidance from the user,
+# layered on top of the platform profile, not a replacement for it)
 # =============================================================================
 
 
-def build_prompt(topic: str, platform: str, retrieved_chunks: List[Dict[str, Any]]) -> str:
+def build_prompt(
+    topic: str,
+    platform: str,
+    retrieved_chunks: List[Dict[str, Any]],
+    tone_nudge: Optional[str] = None,
+) -> str:
     if platform not in PLATFORM_PROFILES:
         raise ValueError(f"Unknown platform: {platform}")
 
     profile = PLATFORM_PROFILES[platform]
     context_block = "\n\n".join(f"[Source: {c['source']}]\n{c['text']}" for c in retrieved_chunks)
+
+    tone_nudge_block = ""
+    if tone_nudge and tone_nudge.strip():
+        tone_nudge_block = (
+            f"\nADDITIONAL STYLE NOTE FROM THE USER (apply on top of the platform profile above, "
+            f"without breaking its length/hashtag/formatting rules): {tone_nudge.strip()}\n"
+        )
 
     prompt = f"""You are a social media copywriter. Write ONE social media post for the platform: {platform}.
 
@@ -310,7 +328,7 @@ PLATFORM PROFILE FOR {platform} (follow this exactly):
 - Formatting: {profile['formatting']}
 - Hashtags: {profile['hashtag_count']}
 - Emoji: {profile['emoji_guidance']}
-
+{tone_nudge_block}
 Respond with ONLY a single JSON object, no markdown code fences, no extra commentary, shaped exactly like this:
 {{"post": "<the full post text, including any hashtags that belong inside the post body>", "hashtags": ["<hashtag1>", "<hashtag2>"], "platform": "{platform}", "char_count": <integer character count of the post field>}}
 """
@@ -375,7 +393,13 @@ def call_groq(prompt: str, model: str = GROQ_MODEL, temperature: float = 0.7) ->
 # =============================================================================
 
 
-def generate_posts(vector_store: VectorStore, topic: str, platforms: List[str], k: int = 3) -> Dict[str, Dict[str, Any]]:
+def generate_posts(
+    vector_store: VectorStore,
+    topic: str,
+    platforms: List[str],
+    k: int = 3,
+    tone_nudge: Optional[str] = None,
+) -> Dict[str, Dict[str, Any]]:
     """Retrieve once for `topic`, then generate one platform-tailored post per entry in `platforms`."""
     retrieved = vector_store.search(topic, k=k)
     if not retrieved:
@@ -388,7 +412,7 @@ def generate_posts(vector_store: VectorStore, topic: str, platforms: List[str], 
             results[platform] = {"error": f"Unknown platform: {platform}"}
             continue
 
-        prompt = build_prompt(topic, platform, retrieved)
+        prompt = build_prompt(topic, platform, retrieved, tone_nudge=tone_nudge)
 
         try:
             parsed = call_groq(prompt)
@@ -607,8 +631,259 @@ hr { border-color: var(--border) !important; }
     text-align: right;
 }
 .source-preview { color: var(--ink-muted); font-size: 0.85rem; line-height: 1.4; }
+
+/* Source legend swatches (grounding view) */
+.legend-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 0.85rem; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+.legend-label { color: var(--ink); font-weight: 500; }
+.legend-score { color: var(--ink-muted); font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; }
+
+/* Grounded / highlighted post text */
+.grounding-text {
+    white-space: pre-wrap;
+    line-height: 1.6;
+    font-size: 0.92rem;
+    color: var(--ink);
+    background-color: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+}
+.grounding-text mark { padding: 1px 3px; border-radius: 3px; }
+.grounding-empty { color: var(--ink-muted); font-size: 0.85rem; font-style: italic; }
+
+/* Platform preview eyebrow chip */
+.preview-chip {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    background-color: var(--surface-alt);
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    margin-bottom: 0.6rem;
+}
+
+/* Platform mockup cards */
+.mockup-card {
+    background-color: #FFFFFF;
+    border: 1px solid #E3E6E8;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: #1A1A1A;
+}
+.mockup-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.mockup-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #FFFFFF; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
+}
+.mockup-name { font-weight: 600; font-size: 0.9rem; color: #1A1A1A; }
+.mockup-meta { font-size: 0.78rem; color: #6B7280; }
+.mockup-body { white-space: pre-wrap; font-size: 0.88rem; line-height: 1.5; color: #1A1A1A; margin-bottom: 10px; }
+.mockup-image {
+    width: 100%; height: 140px; border-radius: 8px; margin-bottom: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.85); font-size: 0.8rem; letter-spacing: 0.03em;
+}
+.mockup-footer { display: flex; gap: 18px; padding-top: 10px; border-top: 1px solid #EEF0F2; font-size: 0.8rem; color: #6B7280; }
+
+/* Action row (copy / regenerate) */
+.action-row-spacer { height: 4px; }
 </style>
 """
+
+
+# =============================================================================
+# Feature: source-grounding highlighter
+#
+# Best-effort visual aid, not a formal citation system: uses difflib to find
+# literal overlapping substrings between the generated post and each retrieved
+# chunk, then highlights each match in a color tied to its source. Paraphrased
+# content (the LLM's own wording) won't highlight — only near-verbatim reuse
+# will. That's a reasonable trade-off for a lightweight, dependency-free check.
+# =============================================================================
+
+HIGHLIGHT_COLORS = ["#FDE68A", "#BFDBFE", "#FBCFE8", "#C7F2D8", "#E9D5FF", "#FED7AA", "#BAE6FD", "#FCA5A5"]
+
+
+def build_grounding_html(post_text: str, sources_used: List[Dict[str, Any]], min_match_chars: int = 14) -> Tuple[str, List[Tuple[str, str, float]]]:
+    """Highlight substrings of `post_text` that overlap with each retrieved chunk.
+
+    Returns (highlighted_html, legend) where legend is a list of
+    (color, source_name, score) for each source that had at least one match.
+    """
+    if not post_text.strip():
+        return '<span class="grounding-empty">Nothing to show yet.</span>', []
+
+    candidate_spans = []  # (start, end, source_idx, color)
+    for idx, src in enumerate(sources_used):
+        color = HIGHLIGHT_COLORS[idx % len(HIGHLIGHT_COLORS)]
+        matcher = difflib.SequenceMatcher(None, post_text, src["text"], autojunk=False)
+        for block in matcher.get_matching_blocks():
+            if block.size >= min_match_chars:
+                snippet = post_text[block.a: block.a + block.size]
+                if snippet.strip():
+                    candidate_spans.append((block.a, block.a + block.size, idx, color))
+
+    if not candidate_spans:
+        escaped = html_lib.escape(post_text).replace("\n", "<br>")
+        return f'<div class="grounding-text">{escaped}</div>', []
+
+    # Resolve overlaps: keep the longest matches first, skip anything that overlaps an already-kept span.
+    candidate_spans.sort(key=lambda s: -(s[1] - s[0]))
+    accepted: List[Tuple[int, int, int, str]] = []
+    for span in candidate_spans:
+        if not any(span[0] < acc[1] and acc[0] < span[1] for acc in accepted):
+            accepted.append(span)
+    accepted.sort(key=lambda s: s[0])
+
+    pieces = []
+    cursor = 0
+    legend: List[Tuple[str, str, float]] = []
+    seen_idx = set()
+    for start, end, idx, color in accepted:
+        pieces.append(html_lib.escape(post_text[cursor:start]))
+        matched = html_lib.escape(post_text[start:end])
+        source_name = html_lib.escape(str(sources_used[idx]["source"]))
+        pieces.append(f'<mark style="background-color:{color};" title="From: {source_name}">{matched}</mark>')
+        cursor = end
+        if idx not in seen_idx:
+            seen_idx.add(idx)
+            legend.append((color, sources_used[idx]["source"], sources_used[idx]["score"]))
+
+    pieces.append(html_lib.escape(post_text[cursor:]))
+    highlighted = "".join(pieces).replace("\n", "<br>")
+    return f'<div class="grounding-text">{highlighted}</div>', legend
+
+
+# =============================================================================
+# Feature: platform mockup preview
+#
+# Approximate, generic-identity previews (no real logos/brand marks are
+# reproduced) so you can see roughly how a post will read in situ — line
+# wrapping, hashtag placement, caption length — before you copy it out.
+# =============================================================================
+
+
+def _mockup_avatar(bg: str, initials: str = "YN") -> str:
+    return f'<div class="mockup-avatar" style="background-color:{bg};">{initials}</div>'
+
+
+def render_platform_mockup(platform: str, post_text: str) -> str:
+    text = html_lib.escape(post_text).replace("\n", "<br>")
+    chip = f'<div class="preview-chip">Preview · {html_lib.escape(platform)}</div>'
+
+    if platform == "LinkedIn":
+        card = f"""
+        <div class="mockup-card">
+            <div class="mockup-header">
+                {_mockup_avatar('#0A66C2')}
+                <div>
+                    <div class="mockup-name">Your Name</div>
+                    <div class="mockup-meta">Your Headline · 2h · 🌐</div>
+                </div>
+            </div>
+            <div class="mockup-body">{text}</div>
+            <div class="mockup-footer"><span>👍 Like</span><span>💬 Comment</span><span>🔁 Repost</span><span>📤 Send</span></div>
+        </div>
+        """
+    elif platform == "X":
+        card = f"""
+        <div class="mockup-card">
+            <div class="mockup-header">
+                {_mockup_avatar('#0F1419')}
+                <div>
+                    <div class="mockup-name">Your Name <span class="mockup-meta">@yourhandle · 2h</span></div>
+                </div>
+            </div>
+            <div class="mockup-body">{text}</div>
+            <div class="mockup-footer"><span>💬</span><span>🔁</span><span>❤️</span><span>📊</span><span>🔖</span></div>
+        </div>
+        """
+    elif platform == "Instagram":
+        card = f"""
+        <div class="mockup-card">
+            <div class="mockup-header">
+                {_mockup_avatar('#DD2A7B')}
+                <div class="mockup-name">yourhandle</div>
+            </div>
+            <div class="mockup-image" style="background: linear-gradient(135deg, #F58529, #DD2A7B, #8134AF, #515BD4);">📷 your image here</div>
+            <div class="mockup-footer" style="border-top:none; padding-top:0; margin-bottom:8px;"><span>❤️</span><span>💬</span><span>📤</span><span>🔖</span></div>
+            <div class="mockup-body" style="margin-bottom:0;"><span class="mockup-name">yourhandle</span> {text}</div>
+        </div>
+        """
+    elif platform == "Facebook":
+        card = f"""
+        <div class="mockup-card">
+            <div class="mockup-header">
+                {_mockup_avatar('#1877F2')}
+                <div>
+                    <div class="mockup-name">Your Name</div>
+                    <div class="mockup-meta">2h · 🌐</div>
+                </div>
+            </div>
+            <div class="mockup-body">{text}</div>
+            <div class="mockup-footer"><span>👍 Like</span><span>💬 Comment</span><span>↗️ Share</span></div>
+        </div>
+        """
+    else:  # Threads
+        card = f"""
+        <div class="mockup-card">
+            <div class="mockup-header">
+                {_mockup_avatar('#101010')}
+                <div class="mockup-name">yourhandle <span class="mockup-meta">2h</span></div>
+            </div>
+            <div class="mockup-body">{text}</div>
+            <div class="mockup-footer"><span>♡</span><span>💬</span><span>🔁</span><span>↗</span></div>
+        </div>
+        """
+    return chip + card
+
+
+# =============================================================================
+# Feature: real copy-to-clipboard button (st.markdown can't execute <script>
+# tags, so this uses components.html, which renders in its own iframe and
+# does run JS)
+# =============================================================================
+
+
+def copy_button_component(text: str, element_id: str) -> None:
+    # Safely embed as a JS string literal, and neutralize "</" so a post that happens to
+    # contain a literal "</script>" can't prematurely close this component's <script> tag.
+    safe_text = json.dumps(text).replace("</", "<\\/")
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]", "-", element_id)
+    snippet = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+      <button id="copy-{safe_id}" style="
+          background-color:#2F6F62; color:#FFFFFF; border:none; border-radius:8px;
+          padding:8px 14px; font-size:0.85rem; font-weight:500; cursor:pointer;
+          display:inline-flex; align-items:center; gap:6px; transition:background-color 0.15s;
+      " onmouseover="this.style.backgroundColor='#24564B'" onmouseout="this.style.backgroundColor='#2F6F62'">
+        📋 Copy post
+      </button>
+    </div>
+    <script>
+      const btn = document.getElementById("copy-{safe_id}");
+      btn.addEventListener("click", function() {{
+        navigator.clipboard.writeText({safe_text}).then(function() {{
+          btn.innerHTML = "✓ Copied";
+          setTimeout(function() {{ btn.innerHTML = "📋 Copy post"; }}, 1500);
+        }}).catch(function() {{
+          btn.innerHTML = "Couldn't copy — select manually";
+          setTimeout(function() {{ btn.innerHTML = "📋 Copy post"; }}, 2000);
+        }});
+      }});
+    </script>
+    """
+    components.html(snippet, height=46)
 
 
 def relevance_bar_html(score: float) -> str:
@@ -674,6 +949,8 @@ _defaults = {
     "vector_store": None,
     "kb_summary": None,
     "generation_results": {},
+    "last_topic": "the key takeaways",
+    "last_tone_nudge": "",
 }
 for _key, _val in _defaults.items():
     if _key not in st.session_state:
@@ -776,6 +1053,12 @@ with st.container(border=True):
     topic_input = st.text_input("What should the post focus on?", placeholder="the key takeaways")
     topic = topic_input.strip() if topic_input and topic_input.strip() else "the key takeaways"
 
+    tone_nudge_input = st.text_input(
+        "Add a tone nudge (optional)",
+        placeholder="e.g. more playful, more formal, add a personal anecdote",
+        help="Layered on top of each platform's built-in tone/length/hashtag rules — it won't override them.",
+    )
+
     platforms_selected = st.multiselect("Platforms", options=list(PLATFORM_PROFILES.keys()))
 
     generate_disabled = not (st.session_state.kb_built and platforms_selected and GROQ_API_KEY)
@@ -794,8 +1077,12 @@ with st.container(border=True):
         else:
             with st.spinner(f"Retrieving context and generating {len(platforms_selected)} post(s)..."):
                 try:
-                    results = generate_posts(st.session_state.vector_store, topic, platforms_selected, k=top_k)
+                    results = generate_posts(
+                        st.session_state.vector_store, topic, platforms_selected, k=top_k, tone_nudge=tone_nudge_input
+                    )
                     st.session_state.generation_results = results
+                    st.session_state.last_topic = topic
+                    st.session_state.last_tone_nudge = tone_nudge_input
                     for key in list(st.session_state.keys()):
                         if key.startswith("post_text_"):
                             del st.session_state[key]
@@ -808,35 +1095,134 @@ st.write("")
 st.subheader("3. Your posts")
 with st.container(border=True):
     results = st.session_state.generation_results
+
     if results:
+        # Export current (possibly edited) posts for every platform that generated successfully.
+        exportable = {
+            platform: st.session_state.get(f"post_text_{platform}", data.get("post", ""))
+            for platform, data in results.items()
+            if "error" not in data
+        }
+        if exportable:
+            txt_parts = []
+            for platform, text in exportable.items():
+                txt_parts.append(f"=== {platform} ===\n{text}\n")
+            txt_blob = "\n".join(txt_parts)
+
+            csv_buffer = io.StringIO()
+            writer = csv.writer(csv_buffer)
+            writer.writerow(["platform", "post", "hashtags", "char_count", "char_limit", "exceeds_limit"])
+            for platform, text in exportable.items():
+                data = results[platform]
+                writer.writerow([
+                    platform,
+                    text,
+                    ", ".join(data.get("hashtags", [])),
+                    len(text),
+                    data.get("char_limit", ""),
+                    data.get("exceeds_limit", ""),
+                ])
+
+            exp_col1, exp_col2, _ = st.columns([1, 1, 3])
+            with exp_col1:
+                st.download_button(
+                    "📄 Export .txt", data=txt_blob, file_name="posts.txt", mime="text/plain", use_container_width=True
+                )
+            with exp_col2:
+                st.download_button(
+                    "📊 Export .csv", data=csv_buffer.getvalue(), file_name="posts.csv", mime="text/csv", use_container_width=True
+                )
+            st.write("")
+
         tabs = st.tabs(list(results.keys()))
         for tab, platform in zip(tabs, results.keys()):
             data = results[platform]
             with tab:
                 if "error" in data:
                     st.error(f"{platform} failed: {data['error']}")
+                    regen_key = f"regen_err_{platform}"
+                    if st.button("🔁 Try again", key=regen_key):
+                        if groq_client is None:
+                            st.error("Groq client is not configured — GROQ_API_KEY is missing.")
+                        else:
+                            retry_topic = st.session_state.get("last_topic", topic)
+                            retry_nudge = st.session_state.get("last_tone_nudge", tone_nudge_input)
+                            with st.spinner(f"Regenerating {platform}..."):
+                                try:
+                                    single = generate_posts(
+                                        st.session_state.vector_store, retry_topic, [platform], k=top_k, tone_nudge=retry_nudge
+                                    )
+                                    st.session_state.generation_results[platform] = single[platform]
+                                    st.session_state.pop(f"post_text_{platform}", None)
+                                    st.rerun()
+                                except Exception as exc:
+                                    st.error(f"Regeneration failed: {exc}")
                     continue
 
                 text_key = f"post_text_{platform}"
                 if text_key not in st.session_state:
                     st.session_state[text_key] = data["post"]
 
-                st.text_area("Post text (editable — select all to copy)", key=text_key, height=220)
+                st.text_area("Post text (editable)", key=text_key, height=200)
                 current_text = st.session_state[text_key]
                 char_count = len(current_text)
                 limit = data["char_limit"]
 
+                action_col1, action_col2, action_col3 = st.columns([1.1, 1.3, 2.6])
+                with action_col1:
+                    copy_button_component(current_text, element_id=f"copy_{platform}")
+                with action_col2:
+                    if st.button("🔁 Regenerate", key=f"regen_{platform}", use_container_width=True):
+                        if groq_client is None:
+                            st.error("Groq client is not configured — GROQ_API_KEY is missing.")
+                        else:
+                            retry_topic = st.session_state.get("last_topic", topic)
+                            retry_nudge = st.session_state.get("last_tone_nudge", tone_nudge_input)
+                            with st.spinner(f"Regenerating {platform}..."):
+                                try:
+                                    single = generate_posts(
+                                        st.session_state.vector_store, retry_topic, [platform], k=top_k, tone_nudge=retry_nudge
+                                    )
+                                    st.session_state.generation_results[platform] = single[platform]
+                                    st.session_state.pop(text_key, None)
+                                    st.rerun()
+                                except Exception as exc:
+                                    st.error(f"Regeneration failed: {exc}")
+
                 st.markdown(char_status_badge_html(char_count, limit), unsafe_allow_html=True)
                 st.write("**Hashtags:**", ", ".join(data["hashtags"]) if data["hashtags"] else "_none suggested_")
 
-                with st.expander("Sources used"):
+                st.write("")
+                st.markdown("**Preview**")
+                st.markdown(render_platform_mockup(platform, current_text), unsafe_allow_html=True)
+
+                with st.expander("🔍 Grounding — see which sources this post draws from"):
+                    highlighted_html, legend = build_grounding_html(current_text, data["sources_used"])
+                    st.markdown(highlighted_html, unsafe_allow_html=True)
+
+                    if legend:
+                        st.caption("Highlighted phrases trace back to:")
+                        for color, source_name, score in legend:
+                            st.markdown(
+                                f'<div class="legend-row">'
+                                f'<span class="legend-swatch" style="background-color:{color};"></span>'
+                                f'<span class="legend-label">{html_lib.escape(str(source_name))}</span>'
+                                f'<span class="legend-score">similarity {score:.2f}</span>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                    else:
+                        st.caption("No near-verbatim phrases matched — the model paraphrased the source material.")
+
+                    st.divider()
+                    st.caption("All retrieved sources for this post:")
                     for src in data["sources_used"]:
                         preview = src["text"][:300] + ("..." if len(src["text"]) > 300 else "")
                         st.markdown(
                             f'<div class="source-block">'
-                            f'<div class="source-name">{src["source"]}</div>'
+                            f'<div class="source-name">{html_lib.escape(str(src["source"]))}</div>'
                             f'{relevance_bar_html(src["score"])}'
-                            f'<div class="source-preview">{preview}</div>'
+                            f'<div class="source-preview">{html_lib.escape(preview)}</div>'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
