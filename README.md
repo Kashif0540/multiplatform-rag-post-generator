@@ -34,26 +34,19 @@ If a URL can't be fetched, or a file has no extractable text, the app reports it
 
 ## Demo
 
-<!--
-  Add your own screenshots here — see the "Adding demo screenshots" guide
-  for how to capture, name, and commit them. Each image below is expected
-  at screenshots/<filename>.png; swap in real files and these will render
-  automatically on GitHub.
--->
-
 | Step | Screenshot |
 |---|---|
 | 1. Add source content & build the knowledge base | `screenshots/01-build-knowledge-base.png` |
-| 2. Choose topic, tone nudge, and platforms | `screenshots/02-choose-topic-platforms.png` |
-| 3. Generated post with platform mockup preview | `screenshots/03-platform-preview.png` |
-| Grounding view — highlighted source phrases | `screenshots/04-grounding-view.png` |
+| 2. Choose topic, tone nudge, and platforms | `screenshots/02-choose-topic-platforms.jpeg` |
+| 3. Generated post with platform mockup preview | `screenshots/03-platform-preview.jpeg` |
+| Grounding view — highlighted source phrases | `screenshots/04-grounding-view.jpeg` |
 
-```markdown
-![Build knowledge base](screenshots/01-build-knowledge-base.png)
-![Choose topic and platforms](screenshots/02-choose-topic-platforms.png)
-![Platform mockup preview](screenshots/03-platform-preview.png)
-![Grounding view](screenshots/04-grounding-view.png)
-```
+Click any thumbnail below to open the full-size image.
+
+[![Build knowledge base](screenshots/01-build-knowledge-base.png)](screenshots/01-build-knowledge-base.png)
+[![Choose topic and platforms](screenshots/02-choose-topic-platforms.jpeg)](screenshots/02-choose-topic-platforms.jpeg)
+[![Platform mockup preview](screenshots/03-platform-preview.jpeg)](screenshots/03-platform-preview.jpeg)
+[![Grounding view](screenshots/04-grounding-view.jpeg)](screenshots/04-grounding-view.jpeg)
 
 ## Folder structure
 
