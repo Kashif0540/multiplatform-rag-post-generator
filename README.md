@@ -32,6 +32,29 @@ If a URL can't be fetched, or a file has no extractable text, the app reports it
 - **Platform mockup preview** — each post renders inside an approximate LinkedIn/X/Instagram/Facebook/Threads-style card (generic placeholder identity, no real logos/brand marks reproduced) so you can see roughly how it'll read in situ
 - **Grounding view** — an expander that highlights phrases in the generated post that trace back near-verbatim to a specific retrieved chunk, color-coded per source with a legend. This is a best-effort visual aid (built with `difflib`, no extra dependencies) — paraphrased content won't highlight, only close textual reuse will
 
+## Demo
+
+<!--
+  Add your own screenshots here — see the "Adding demo screenshots" guide
+  for how to capture, name, and commit them. Each image below is expected
+  at screenshots/<filename>.png; swap in real files and these will render
+  automatically on GitHub.
+-->
+
+| Step | Screenshot |
+|---|---|
+| 1. Add source content & build the knowledge base | `screenshots/01-build-knowledge-base.png` |
+| 2. Choose topic, tone nudge, and platforms | `screenshots/02-choose-topic-platforms.png` |
+| 3. Generated post with platform mockup preview | `screenshots/03-platform-preview.png` |
+| Grounding view — highlighted source phrases | `screenshots/04-grounding-view.png` |
+
+```markdown
+![Build knowledge base](screenshots/01-build-knowledge-base.png)
+![Choose topic and platforms](screenshots/02-choose-topic-platforms.png)
+![Platform mockup preview](screenshots/03-platform-preview.png)
+![Grounding view](screenshots/04-grounding-view.png)
+```
+
 ## Folder structure
 
 ```
@@ -39,6 +62,7 @@ If a URL can't be fetched, or a file has no extractable text, the app reports it
 ├── app.py               # The Streamlit app (all pipeline logic + UI)
 ├── requirements.txt      # Pinned dependencies
 ├── README.md             # This file
+├── screenshots/          # Demo screenshots referenced above (add your own)
 └── .streamlit/
     ├── config.toml         # Theme (colors) — safe to commit, no secrets in it
     └── secrets.toml        # Local-only, holds GROQ_API_KEY — never commit this
