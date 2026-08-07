@@ -5,7 +5,7 @@ Wraps the exact ingestion -> chunking -> local-embedding -> FAISS -> retrieval
 -> platform-profiled Groq generation pipeline validated in Phase 1's Colab
 notebook (multiplatform_rag_post_generator_test.ipynb) in an upload/URL +
 platform-picker interface. No pipeline logic is rewritten here — only the
-key-resolution and file-reading glue changes to fit Streamlit.
+key-resolution and file-reading glue changes to fit Streamlit
 """
 
 import csv
