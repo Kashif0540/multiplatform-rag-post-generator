@@ -329,13 +329,14 @@ PLATFORM PROFILE FOR {platform} (follow this exactly):
 - Hashtags: {profile['hashtag_count']}
 - Emoji: {profile['emoji_guidance']}
 {tone_nudge_block}
+
 Respond with ONLY valid JSON.
 Do not use markdown.
 Do not use ```json fences.
 Do not include explanations or reasoning.
 Return exactly one JSON object with these fields:
-{{"post": "<the full post text, including any hashtags that belong inside the post body>", 
-"hashtags": ["<hashtag1>", "<hashtag2>"], "platform": "{platform}", "char_count": <integer character count of the post field>}}
+{{"post": "<the full post text, including any hashtags that belong inside the post body>", "hashtags": ["<hashtag1>", "<hashtag2>"], "platform": "{platform}", "char_count": <integer character count of the post field>}}
+"""
     return prompt
 
 
