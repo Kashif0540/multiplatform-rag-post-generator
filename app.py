@@ -340,12 +340,15 @@ The response MUST NOT contain reasoning, commentary, or any text outside the JSO
 
 Use exactly this structure:
 
-{
+Use exactly this structure:
+
+{{
   "post": "string",
   "hashtags": ["string"],
   "platform": "string",
   "char_count": 0
-}
+}}
+
 
 Rules:
 - "post" must contain the complete generated post.
@@ -388,8 +391,9 @@ def call_groq(
                 }
             ],
             temperature=0.3,
-            include_reasoning=False,
-            response_format={"type": "json_object"},
+reasoning_format="hidden",
+response_format={"type": "json_object"},
+
         )
 
     except Exception as exc:
@@ -510,88 +514,7 @@ def call_groq(
     )
 
 
-    # -------------------------------------------------------------------------
-    # Extract model response
-    # -------------------------------------------------------------------------
-
-    try:
-        raw = response.choices[0].message.content or ""
-    except (AttributeError, IndexError, TypeError) as exc:
-        raise ValueError(
-            f"Groq returned an unexpected response structure: {response}"
-        ) from exc
-
-    cleaned = raw.strip()
-
-    if not cleaned:
-        raise ValueError("Groq returned an empty response.")
-
-    # -------------------------------------------------------------------------
-    # Remove Markdown code fences if the model returned them despite the
-    # response_format={"type": "json_object"} instruction.
-    # -------------------------------------------------------------------------
-
-    if cleaned.startswith("```"):
-        cleaned = re.sub(
-            r"^```(?:json)?\s*",
-            "",
-            cleaned,
-            flags=re.IGNORECASE,
-        )
-
-        cleaned = re.sub(
-            r"\s*```$",
-            "",
-            cleaned,
-        ).strip()
-
-    # -------------------------------------------------------------------------
-    # First attempt: parse the complete response as JSON.
-    # -------------------------------------------------------------------------
-
-    try:
-        parsed = json.loads(cleaned)
-
-        if not isinstance(parsed, dict):
-            raise ValueError(
-                "Groq returned valid JSON, but it was not a JSON object."
-            )
-
-        return parsed
-
-    except json.JSONDecodeError:
-        pass
-
-    # -------------------------------------------------------------------------
-    # Fallback: extract a JSON object if the model added surrounding text.
-    # -------------------------------------------------------------------------
-
-    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-
-    if match:
-        json_text = match.group(0)
-
-        try:
-            parsed = json.loads(json_text)
-
-            if not isinstance(parsed, dict):
-                raise ValueError(
-                    "Extracted Groq JSON is valid, but it is not an object."
-                )
-
-            return parsed
-
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                "Could not parse Groq JSON response after cleanup: "
-                f"{exc}\nRaw response: {raw[:500]}"
-            ) from exc
-
-    raise ValueError(
-        f"Groq response was not valid JSON: {raw[:500]}"
-    )
-
-
+   
 # =============================================================================
 # Full pipeline (identical to Phase 1)
 # =============================================================================
