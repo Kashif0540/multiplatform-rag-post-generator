@@ -32,7 +32,7 @@ from sentence_transformers import SentenceTransformer
 # =============================================================================
 
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
-GROQ_MODEL = "GROQ_MODEL = "openai/gpt-oss-120b""
+GROQ_MODEL = "openai/gpt-oss-120b""
 
 PLATFORM_PROFILES: Dict[str, Dict[str, Any]] = {
     "LinkedIn": {
