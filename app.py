@@ -329,13 +329,30 @@ PLATFORM PROFILE FOR {platform} (follow this exactly):
 - Hashtags: {profile['hashtag_count']}
 - Emoji: {profile['emoji_guidance']}
 {tone_nudge_block}
+OUTPUT REQUIREMENTS:
 
-Respond with ONLY valid JSON.
-Do not use markdown.
-Do not use ```json fences.
-Do not include explanations or reasoning.
-Return exactly one JSON object with these fields:
-{{"post": "<the full post text, including any hashtags that belong inside the post body>", "hashtags": ["<hashtag1>", "<hashtag2>"], "platform": "{platform}", "char_count": <integer character count of the post field>}}
+Return exactly one JSON object.
+
+The response MUST be valid JSON.
+The response MUST NOT contain Markdown.
+The response MUST NOT contain ``` fences.
+The response MUST NOT contain reasoning, commentary, or any text outside the JSON object.
+
+Use exactly this structure:
+
+{
+  "post": "string",
+  "hashtags": ["string"],
+  "platform": "string",
+  "char_count": 0
+}
+
+Rules:
+- "post" must contain the complete generated post.
+- "hashtags" must be a JSON array of strings.
+- "platform" must be exactly "{platform}".
+- "char_count" must equal the number of characters in "post".
+
 """
     return prompt
 # =============================================================================
