@@ -339,53 +339,150 @@ Return exactly one JSON object with these fields:
 """
     return prompt
 
-
 # =============================================================================
-# Groq generation (identical logic to Phase 1; client resolved via st.secrets
-# instead of Colab's userdata/getpass, and held in a module-level variable
-# that call_groq() reads — mirroring the notebook's global groq_client)
+# Groq generation
 # =============================================================================
 
-groq_client: Optional[Groq] = None  # set at app start once the key is resolved
+groq_client: Optional[Groq] = None
 
 
-response = groq_client.chat.completions.create(
-    model=model,
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0.3,
-    reasoning_format="hidden",
-    response_format={"type": "json_object"},
-)
-    except Exception as exc:
-        message = str(exc).lower()
-        if "401" in message or "auth" in message:
-            raise RuntimeError("Groq authentication failed — double-check your GROQ_API_KEY.") from exc
-        if "429" in message or "rate" in message:
-            raise RuntimeError("Groq rate limit hit — wait a moment and try again.") from exc
-        if "timeout" in message or "connection" in message:
-            raise RuntimeError(f"Groq network error: {exc}") from exc
-        raise RuntimeError(f"Groq request failed: {exc}") from exc
+def call_groq(
+    prompt: str,
+    model: str = GROQ_MODEL,
+) -> Dict[str, Any]:
+    """
+    Send a prompt to Groq and parse the response as JSON.
 
-    raw = response.choices[0].message.content or ""
-    cleaned = raw.strip()
+    The Groq client is initialized once at app startup from Streamlit secrets
+    and stored in the module-level `groq_client` variable.
+    """
 
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(json)?", "", cleaned).strip()
-        cleaned = re.sub(r"```$", "", cleaned).strip()
+    if groq_client is None:
+        raise RuntimeError(
+            "Groq client is not configured — GROQ_API_KEY is missing."
+        )
 
     try:
-        return json.loads(cleaned)
+        response = groq_client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            temperature=0.3,
+            reasoning_format="hidden",
+            response_format={"type": "json_object"},
+        )
+
+    except Exception as exc:
+        message = str(exc).lower()
+
+        if "401" in message or "authentication" in message or "unauthorized" in message:
+            raise RuntimeError(
+                "Groq authentication failed — double-check your GROQ_API_KEY."
+            ) from exc
+
+        if "429" in message or "rate limit" in message or "rate_limit" in message:
+            raise RuntimeError(
+                "Groq rate limit hit — wait a moment and try again."
+            ) from exc
+
+        if (
+            "timeout" in message
+            or "timed out" in message
+            or "connection" in message
+            or "connect" in message
+        ):
+            raise RuntimeError(
+                f"Groq network error: {exc}"
+            ) from exc
+
+        raise RuntimeError(
+            f"Groq request failed: {exc}"
+        ) from exc
+
+    # -------------------------------------------------------------------------
+    # Extract model response
+    # -------------------------------------------------------------------------
+
+    try:
+        raw = response.choices[0].message.content or ""
+    except (AttributeError, IndexError, TypeError) as exc:
+        raise ValueError(
+            f"Groq returned an unexpected response structure: {response}"
+        ) from exc
+
+    cleaned = raw.strip()
+
+    if not cleaned:
+        raise ValueError("Groq returned an empty response.")
+
+    # -------------------------------------------------------------------------
+    # Remove Markdown code fences if the model returned them despite the
+    # response_format={"type": "json_object"} instruction.
+    # -------------------------------------------------------------------------
+
+    if cleaned.startswith("```"):
+        cleaned = re.sub(
+            r"^```(?:json)?\s*",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+
+        cleaned = re.sub(
+            r"\s*```$",
+            "",
+            cleaned,
+        ).strip()
+
+    # -------------------------------------------------------------------------
+    # First attempt: parse the complete response as JSON.
+    # -------------------------------------------------------------------------
+
+    try:
+        parsed = json.loads(cleaned)
+
+        if not isinstance(parsed, dict):
+            raise ValueError(
+                "Groq returned valid JSON, but it was not a JSON object."
+            )
+
+        return parsed
+
     except json.JSONDecodeError:
         pass
 
-    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Could not parse Groq JSON response after cleanup: {exc}\nRaw response: {raw[:300]}")
+    # -------------------------------------------------------------------------
+    # Fallback: extract a JSON object if the model added surrounding text.
+    # -------------------------------------------------------------------------
 
-    raise ValueError(f"Groq response was not valid JSON: {raw[:300]}")
+    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+
+    if match:
+        json_text = match.group(0)
+
+        try:
+            parsed = json.loads(json_text)
+
+            if not isinstance(parsed, dict):
+                raise ValueError(
+                    "Extracted Groq JSON is valid, but it is not an object."
+                )
+
+            return parsed
+
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "Could not parse Groq JSON response after cleanup: "
+                f"{exc}\nRaw response: {raw[:500]}"
+            ) from exc
+
+    raise ValueError(
+        f"Groq response was not valid JSON: {raw[:500]}"
+    )
 
 
 # =============================================================================
