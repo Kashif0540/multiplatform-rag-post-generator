@@ -338,7 +338,6 @@ Return exactly one JSON object with these fields:
 {{"post": "<the full post text, including any hashtags that belong inside the post body>", "hashtags": ["<hashtag1>", "<hashtag2>"], "platform": "{platform}", "char_count": <integer character count of the post field>}}
 """
     return prompt
-
 # =============================================================================
 # Groq generation
 # =============================================================================
@@ -351,10 +350,10 @@ def call_groq(
     model: str = GROQ_MODEL,
 ) -> Dict[str, Any]:
     """
-    Send a prompt to Groq and parse the response as JSON.
+    Generate one JSON response from Groq.
 
-    The Groq client is initialized once at app startup from Streamlit secrets
-    and stored in the module-level `groq_client` variable.
+    GPT-OSS models use include_reasoning=False rather than
+    reasoning_format="hidden".
     """
 
     if groq_client is None:
@@ -372,19 +371,27 @@ def call_groq(
                 }
             ],
             temperature=0.3,
-            reasoning_format="hidden",
+            include_reasoning=False,
             response_format={"type": "json_object"},
         )
 
     except Exception as exc:
         message = str(exc).lower()
 
-        if "401" in message or "authentication" in message or "unauthorized" in message:
+        if (
+            "401" in message
+            or "authentication" in message
+            or "unauthorized" in message
+        ):
             raise RuntimeError(
                 "Groq authentication failed — double-check your GROQ_API_KEY."
             ) from exc
 
-        if "429" in message or "rate limit" in message or "rate_limit" in message:
+        if (
+            "429" in message
+            or "rate limit" in message
+            or "rate_limit" in message
+        ):
             raise RuntimeError(
                 "Groq rate limit hit — wait a moment and try again."
             ) from exc
@@ -402,6 +409,89 @@ def call_groq(
         raise RuntimeError(
             f"Groq request failed: {exc}"
         ) from exc
+
+    # -------------------------------------------------------------------------
+    # Get generated content
+    # -------------------------------------------------------------------------
+
+    try:
+        raw = response.choices[0].message.content or ""
+    except (AttributeError, IndexError, TypeError) as exc:
+        raise ValueError(
+            f"Groq returned an unexpected response structure: {response}"
+        ) from exc
+
+    cleaned = raw.strip()
+
+    if not cleaned:
+        raise ValueError(
+            "Groq returned an empty response."
+        )
+
+    # -------------------------------------------------------------------------
+    # Remove accidental Markdown code fences
+    # -------------------------------------------------------------------------
+
+    if cleaned.startswith("```"):
+        cleaned = re.sub(
+            r"^```(?:json)?\s*",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+
+        cleaned = re.sub(
+            r"\s*```$",
+            "",
+            cleaned,
+        ).strip()
+
+    # -------------------------------------------------------------------------
+    # Parse JSON
+    # -------------------------------------------------------------------------
+
+    try:
+        parsed = json.loads(cleaned)
+
+        if not isinstance(parsed, dict):
+            raise ValueError(
+                "Groq returned valid JSON, but it was not a JSON object."
+            )
+
+        return parsed
+
+    except json.JSONDecodeError:
+        pass
+
+    # -------------------------------------------------------------------------
+    # Fallback: extract JSON object from surrounding text
+    # -------------------------------------------------------------------------
+
+    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+
+    if match:
+        json_text = match.group(0)
+
+        try:
+            parsed = json.loads(json_text)
+
+            if not isinstance(parsed, dict):
+                raise ValueError(
+                    "Extracted JSON is not a JSON object."
+                )
+
+            return parsed
+
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "Could not parse Groq JSON response after cleanup: "
+                f"{exc}\nRaw response: {raw[:500]}"
+            ) from exc
+
+    raise ValueError(
+        f"Groq response was not valid JSON: {raw[:500]}"
+    )
+
 
     # -------------------------------------------------------------------------
     # Extract model response
