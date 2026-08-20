@@ -329,9 +329,13 @@ PLATFORM PROFILE FOR {platform} (follow this exactly):
 - Hashtags: {profile['hashtag_count']}
 - Emoji: {profile['emoji_guidance']}
 {tone_nudge_block}
-Respond with ONLY a single JSON object, no markdown code fences, no extra commentary, shaped exactly like this:
-{{"post": "<the full post text, including any hashtags that belong inside the post body>", "hashtags": ["<hashtag1>", "<hashtag2>"], "platform": "{platform}", "char_count": <integer character count of the post field>}}
-"""
+Respond with ONLY valid JSON.
+Do not use markdown.
+Do not use ```json fences.
+Do not include explanations or reasoning.
+Return exactly one JSON object with these fields:
+{{"post": "<the full post text, including any hashtags that belong inside the post body>", 
+"hashtags": ["<hashtag1>", "<hashtag2>"], "platform": "{platform}", "char_count": <integer character count of the post field>}}
     return prompt
 
 
@@ -344,18 +348,13 @@ Respond with ONLY a single JSON object, no markdown code fences, no extra commen
 groq_client: Optional[Groq] = None  # set at app start once the key is resolved
 
 
-def call_groq(prompt: str, model: str = GROQ_MODEL, temperature: float = 0.7) -> Dict[str, Any]:
-    """Call Groq chat completions in JSON object mode and return the parsed dict."""
-    if groq_client is None:
-        raise RuntimeError("Groq client is not configured — GROQ_API_KEY is missing.")
-
-    try:
-        response = groq_client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=temperature,
-            response_format={"type": "json_object"},
-        )
+response = groq_client.chat.completions.create(
+    model=model,
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0.3,
+    reasoning_format="hidden",
+    response_format={"type": "json_object"},
+)
     except Exception as exc:
         message = str(exc).lower()
         if "401" in message or "auth" in message:
